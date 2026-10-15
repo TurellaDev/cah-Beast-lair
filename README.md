@@ -1,6 +1,6 @@
-# hmp-beast-lairs
+# cah-beast-lairs
 
-`hmp-beast-lairs` spawns configured wild beast populations when players approach a lair. It uses the server `Beast` API documented at:
+`cah-beast-lairs` spawns configured wild beast populations when players approach a lair. It uses the server `Beast` API documented at:
 
 https://docs.hogwarts-mp.com/guides/npcs-and-creatures/beasts-and-characters/
 
