@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beast Lair Editor</title>
+<style>
+  :root {
+    --bg: #12100e;
+    --panel: #1c1917;
+    --panel-2: #241f1c;
+    --line: #3a322c;
+    --ink: #e9e0d2;
+    --muted: #a2968a;
+    --accent: #c9a24b;
+    --accent-ink: #1a1408;
+    --danger: #b4453a;
+    --ok: #6fae7a;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Trebuchet MS", system-ui, sans-serif;
+    background: transparent;
+    color: var(--ink);
+    font-size: 13px;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* Floating, resizable panel. Web.createView has no size option, so the page
+     bounds itself. It is centred on load, draggable by the header, and the
+     native CSS resize grip lets the admin make it bigger or smaller. */
+  #app {
+    position: fixed;
+    display: flex; flex-direction: column;
+    width: min(1040px, 92vw);
+    height: min(680px, 88vh);
+    min-width: 420px;
+    min-height: 380px;
+    resize: both;
+    overflow: hidden;
+    background: rgba(22, 19, 16, 0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(90, 78, 66, 0.55);
+    border-radius: 12px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .55);
+  }
+
+  header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px;
+    background: linear-gradient(180deg, #241f1b, #1a1613);
+    border-bottom: 1px solid var(--line);
+    flex: 0 0 auto;
+    cursor: move;
+  }
+  header h1 { font-size: 14px; margin: 0; letter-spacing: .3px; font-weight: 600; white-space: nowrap; }
+  header .spacer { flex: 1 1 auto; }
+  .badge {
+    font-size: 11px; padding: 3px 9px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34vw;
+  }
+  .badge.ok { color: var(--ok); border-color: #2f4a35; }
+  .badge.warn { color: var(--accent); border-color: #4a3f22; }
+
+  main { flex: 1 1 auto; display: flex; min-height: 0; }
+
+  /* Sidebar */
+  #sidebar {
+    width: 240px; flex: 0 0 auto;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  #sidebar .head { padding: 9px; border-bottom: 1px solid var(--line); display: flex; gap: 6px; }
+  #sidebar .head input {
+    flex: 1 1 auto; min-width: 0;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--ink);
+    border-radius: 7px; padding: 6px 9px; font-size: 12px;
+  }
+  #list { flex: 1 1 auto; overflow-y: auto; padding: 5px; }
+  .lair-item {
+    padding: 8px 10px; border-radius: 7px; cursor: pointer;
+    border: 1px solid transparent; margin-bottom: 3px;
+  }
+  .lair-item:hover { background: var(--panel-2); }
+  .lair-item.active { background: #2b241c; border-color: #4a3f22; }
+  .lair-item .k { font-weight: 600; font-size: 12px; display: flex; align-items: center; gap: 7px; }
+  .lair-item .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: 0 0 auto; }
+  .lair-item .dot.off { background: var(--muted); }
+  .lair-item .sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .empty { color: var(--muted); padding: 16px 12px; text-align: center; font-size: 12px; }
+
+  /* Editor */
+  #editor { flex: 1 1 auto; overflow-y: auto; padding: 12px 14px 26px; min-width: 0; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px;
+  }
+  .card h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 9px; min-width: 0; }
+  .field.grow { flex: 1 1 160px; }
+  .field label { font-size: 11px; color: var(--muted); }
+  input[type=text], input[type=number], select {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--ink);
+    border-radius: 7px; padding: 6px 8px; font-size: 12px; width: 100%;
+    font-family: inherit; min-width: 0;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  input[type=number] { -moz-appearance: textfield; }
+  select { cursor: pointer; }
+  .check { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink); }
+  .check input { accent-color: var(--accent); width: 15px; height: 15px; }
+
+  /* Beast rows */
+  .beast {
+    display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px; margin-bottom: 8px;
+  }
+  .beast .field { margin-bottom: 0; }
+  .beast .species-cell { flex: 1 1 180px; }
+  .beast .rm {
+    background: transparent; border: 1px solid var(--line); color: var(--muted);
+    border-radius: 7px; padding: 6px 9px; cursor: pointer; font-size: 11px;
+  }
+  .beast .rm:hover { color: #fff; border-color: var(--danger); background: #2a1614; }
+
+  button {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--ink);
+    border-radius: 7px; padding: 7px 12px; cursor: pointer; font-size: 12px; font-family: inherit;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.danger { background: #2a1614; border-color: #5a2a24; color: #e08a80; }
+  button.danger:hover { border-color: var(--danger); }
+  button.ghost { background: transparent; }
+  button.small { padding: 5px 9px; font-size: 11px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  footer {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; background: #1a1613; border-top: 1px solid var(--line);
+  }
+  #bar { flex: 1 1 auto; font-size: 12px; color: var(--muted); min-width: 0; }
+  #bar.err { color: #e08a80; }
+  #bar.ok { color: var(--ok); }
+
+  .hint { color: var(--muted); font-size: 11px; margin-top: -2px; }
+  #species-list, #color-list { display: none; }
+
+  /* Responsive: stack the sidebar above the editor on narrow panels. */
+  @media (max-width: 820px) {
+    main { flex-direction: column; }
+    #sidebar { width: auto; border-right: 0; border-bottom: 1px solid var(--line); max-height: 34%; }
+    #list { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; }
+    .lair-item { flex: 0 0 auto; min-width: 150px; margin-bottom: 0; }
+    header h1 { display: none; }
+    .badge { max-width: 40vw; }
+  }
+  @media (max-width: 560px) {
+    .badge:not(.ok):not(.warn) { display: none; }
+    .beast { flex-direction: column; align-items: stretch; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="titlebar">
+    <h1>Beast Lair Editor</h1>
+    <span id="status-badge" class="badge">loading…</span>
+    <span id="config-badge" class="badge"></span>
+    <span class="spacer"></span>
+    <button id="btn-reload" class="small ghost" title="Re-read the config file from disk">Reload disk</button>
+    <button id="btn-close" class="small ghost" title="Esc">Close</button>
+  </header>
+
+  <main>
+    <aside id="sidebar">
+      <div class="head">
+        <input id="filter" type="text" placeholder="Filter lairs…" />
+        <button id="btn-new" class="small" title="Create a new lair at your feet">+ New</button>
+      </div>
+      <div id="list"></div>
+    </aside>
+
+    <section id="editor"></section>
+  </main>
+
+  <footer>
+    <div id="bar">Pick a lair on the left, or create a new one.</div>
+    <button id="btn-delete" class="danger" disabled>Delete</button>
+    <button id="btn-save" class="primary" disabled>Save</button>
+  </footer>
+</div>
+
+<datalist id="species-list"></datalist>
+<datalist id="color-list"></datalist>
+
+<script>
+(function () {
+  "use strict";
+
+  var CUSTOM = "__custom__";
+
+  var model = null;          // last full model from the server
+  var draft = null;          // the lair currently being edited (a working copy)
+  var isNew = false;         // draft is not yet in model.lairs
+  var dirty = false;         // draft differs from what the server has
+  var filterText = "";
+  var selectedKey = null;    // key of the lair selected in the list
+  var lastSavedKey = null;   // key to reselect after a save
+
+  function send(event, payload) {
+    try { callEvent(event, JSON.stringify(payload || {})); } catch (_) {}
+  }
+
+  function $(id) { return document.getElementById(id); }
+
+  function bar(message, kind) {
+    var el = $("bar");
+    el.textContent = message || "";
+    el.className = kind || "";
+  }
+
+  function speciesCatalog() {
+    return (model && model.catalog && model.catalog.length) ? model.catalog : [];
+  }
+
+  function speciesEntry(name) {
+    var list = speciesCatalog();
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].species).toLowerCase() === String(name).toLowerCase()) return list[i];
+    }
+    return null;
+  }
+
+  // ---- Draft lifecycle -----------------------------------------------------
+
+  function blankLair() {
+    var pos = (model && model.player && model.player.position) || { x: 0, y: 0, z: 0 };
+    var vw = (model && model.player && model.player.virtualWorld) || 0;
+    var radius = (model && model.defaults && model.defaults.radius) || 3000;
+    return {
+      key: "",
+      enabled: true,
+      position: { x: pos.x, y: pos.y, z: pos.z },
+      radius: radius,
+      virtualWorld: vw,
+      beasts: [newBeast("")]
+    };
+  }
+
+  function newBeast(species) {
+    return { species: species || "", count: 1, capturable: true, gender: "", color: "", name: "", scale: "", yaw: "", _custom: false };
+  }
+
+  function clone(lair) {
+    var copy = JSON.parse(JSON.stringify(lair));
+    copy.beasts = (copy.beasts || []).map(function (g) {
+      return {
+        species: g.species || "", count: g.count || 1,
+        capturable: g.capturable !== false,
+        gender: g.gender || "", color: g.color || "", name: g.name || "",
+        scale: g.scale === undefined ? "" : g.scale,
+        yaw: g.yaw === undefined ? "" : g.yaw,
+        _custom: false
+      };
+    });
+    return copy;
+  }
+
+  function findByKey(key) {
+    if (!model || !model.lairs) return null;
+    for (var i = 0; i < model.lairs.length; i++) {
+      if (model.lairs[i].key === key) return model.lairs[i];
+    }
+    return null;
+  }
+
+  function selectLair(key) {
+    var found = findByKey(key);
+    if (!found) { clearDraft(); return; }
+    draft = clone(found);
+    isNew = false;
+    selectedKey = key;
+    dirty = false;
+    renderList();
+    renderForm();
+    updateFooter();
+    bar("Editing '" + key + "'.");
+  }
+
+  function clearDraft() {
+    draft = null; isNew = false; selectedKey = null; dirty = false;
+    renderList(); renderForm(); updateFooter();
+  }
+
+  // ---- Rendering -----------------------------------------------------------
+
+  function renderBadges() {
+    var s = (model && model.status) || {};
+    var badge = $("status-badge");
+    var state = s.state || "unknown";
+    var active = (s.active === undefined ? 0 : s.active);
+    var lairs = (s.lairs === undefined ? (model && model.lairs ? model.lairs.length : 0) : s.lairs);
+    badge.textContent = state + " · " + lairs + " lair(s) · " + active + " live";
+    badge.className = "badge " + (state === "ready" ? "ok" : "warn");
+    if (model && model.hasBeastApi === false) {
+      $("config-badge").textContent = "Beast.create unavailable";
+      $("config-badge").className = "badge warn";
+    } else {
+      $("config-badge").textContent = (model && model.configSource) || "";
+      $("config-badge").className = "badge";
+    }
+  }
+
+  function renderSpeciesDatalist() {
+    var list = speciesCatalog();
+    var sp = $("species-list");
+    sp.innerHTML = "";
+    var colors = {};
+    list.forEach(function (entry) {
+      var opt = document.createElement("option");
+      opt.value = entry.species;
+      sp.appendChild(opt);
+      (entry.colors || []).forEach(function (c) { colors[c] = true; });
+    });
+    var cl = $("color-list");
+    cl.innerHTML = "";
+    Object.keys(colors).forEach(function (c) {
+      var opt = document.createElement("option");
+      opt.value = c;
+      cl.appendChild(opt);
+    });
+  }
+
+  function renderList() {
+    var host = $("list");
+    host.innerHTML = "";
+    var lairs = (model && model.lairs) || [];
+    var q = filterText.trim().toLowerCase();
+    var shown = 0;
+    lairs.forEach(function (lair) {
+      if (q && lair.key.toLowerCase().indexOf(q) < 0) return;
+      shown++;
+      var item = document.createElement("div");
+      item.className = "lair-item" + (lair.key === selectedKey ? " active" : "");
+      var total = (lair.beasts || []).reduce(function (n, g) { return n + (g.count || 0); }, 0);
+      var species = (lair.beasts || []).map(function (g) { return g.species; }).filter(Boolean).join(", ");
+      item.innerHTML =
+        '<div class="k"><span class="dot' + (lair.enabled ? '' : ' off') + '"></span>' + escapeHtml(lair.key) + '</div>' +
+        '<div class="sub">' + total + ' beast(s) · ' + escapeHtml(species || "no species") + '</div>';
+      item.addEventListener("click", function () { selectLair(lair.key); });
+      host.appendChild(item);
+    });
+    if (isNew && draft) {
+      shown++;
+      var add = document.createElement("div");
+      add.className = "lair-item active";
+      add.innerHTML = '<div class="k"><span class="dot"></span>' + escapeHtml(draft.key || "(new lair)") + ' — new</div>';
+      add.addEventListener("click", function () { renderForm(); });
+      host.appendChild(add);
+    }
+    if (!shown) {
+      var empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = q ? "No lairs match." : "No lairs yet. Click + New to place one at your feet.";
+      host.appendChild(empty);
+    }
+  }
+
+  function renderForm() {
+    var host = $("editor");
+    if (!draft) {
+      host.innerHTML = '<div class="empty">Select a lair to edit it, or create a new one with <b>+ New</b> while standing where it should spawn.</div>';
+      return;
+    }
+
+    var html = "";
+    html += '<div class="card"><h2>Lair</h2>';
+    html += '<div class="row">';
+    html += field("Key", '<input type="text" id="f-key" value="' + escapeAttr(draft.key) + '" placeholder="mooncalf-den" ' + (isNew ? "" : "readonly") + ' />', "grow");
+    html += field("Enabled", '<label class="check"><input type="checkbox" id="f-enabled"' + (draft.enabled ? " checked" : "") + ' /> Spawning on</label>');
+    html += '</div>';
+    html += '<div class="row">';
+    html += field("X", '<input type="number" id="f-x" step="any" value="' + num(draft.position.x) + '" />');
+    html += field("Y", '<input type="number" id="f-y" step="any" value="' + num(draft.position.y) + '" />');
+    html += field("Z", '<input type="number" id="f-z" step="any" value="' + num(draft.position.z) + '" />');
+    html += '</div>';
+    html += '<div class="hint">Stand where you want the lair, then <button id="btn-usepos" class="small">use my position</button> to fill X/Y/Z and the virtual world from where you are right now.</div>';
+    html += '<div class="row" style="margin-top:10px">';
+    html += field("Spawn radius", '<input type="number" id="f-radius" step="any" value="' + num(draft.radius) + '" />');
+    html += field("Virtual world", '<input type="number" id="f-vw" step="1" value="' + num(draft.virtualWorld) + '" />');
+    html += '</div>';
+    html += '</div>';
+
+    html += '<div class="card"><h2>Beasts</h2><div id="beasts"></div>';
+    html += '<button id="btn-addbeast" class="small">+ Add species</button>';
+    html += '</div>';
+
+    host.innerHTML = html;
+    renderBeasts();
+
+    on("f-key", "input", function (e) { draft.key = e.target.value; dirty = true; updateFooter(); });
+    on("f-enabled", "change", function (e) { draft.enabled = e.target.checked; dirty = true; renderList(); });
+    on("f-x", "input", function (e) { draft.position.x = e.target.value; dirty = true; renderList(); });
+    on("f-y", "input", function (e) { draft.position.y = e.target.value; dirty = true; renderList(); });
+    on("f-z", "input", function (e) { draft.position.z = e.target.value; dirty = true; renderList(); });
+    on("f-radius", "input", function (e) { draft.radius = e.target.value; dirty = true; renderList(); });
+    on("f-vw", "input", function (e) { draft.virtualWorld = e.target.value; dirty = true; renderList(); });
+    on("btn-usepos", "click", function () { requestPosition(); });
+    on("btn-addbeast", "click", function () { draft.beasts.push(newBeast("")); dirty = true; renderBeasts(); updateFooter(); });
+  }
+
+  function renderBeasts() {
+    var host = $("beasts");
+    if (!host) return;
+    host.innerHTML = "";
+    draft.beasts.forEach(function (group, index) {
+      host.appendChild(beastRow(group, index));
+    });
+  }
+
+  function beastRow(group, index) {
+    var catalog = speciesCatalog();
+    var entry = speciesEntry(group.species);
+    var genderOptions = (entry && entry.genders && entry.genders.length) ? entry.genders : ["", "male", "female"];
+    var colorOptions = (entry && entry.colors) ? entry.colors : [];
+
+    // A species is "custom" when the admin opted out of the dropdown, or when
+    // the stored id is not in the catalog (e.g. an offspring id).
+    var known = catalog.some(function (c) { return String(c.species).toLowerCase() === String(group.species || "").toLowerCase(); });
+    var custom = group._custom === true || (!!group.species && !known);
+
+    var row = document.createElement("div");
+    row.className = "beast";
+
+    // Species dropdown (with a "Custom…" escape hatch).
+    var spWrap = document.createElement("div");
+    spWrap.className = "field species-cell";
+    var options = '<option value="">— select species —</option>';
+    catalog.forEach(function (c) {
+      options += '<option value="' + escapeAttr(c.species) + '"' +
+        (!custom && group.species === c.species ? " selected" : "") + '>' + escapeHtml(c.species) + '</option>';
+    });
+    options += '<option value="' + CUSTOM + '"' + (custom ? " selected" : "") + '>Custom…</option>';
+    spWrap.innerHTML = '<label>Species</label><select>' + options + '</select>';
+    var spSel = spWrap.querySelector("select");
+    spSel.addEventListener("change", function () {
+      if (spSel.value === CUSTOM) {
+        group._custom = true;
+        group.species = "";
+        renderBeasts();
+        var customInput = document.querySelector('.beast [data-custom-species="1"]');
+        if (customInput) customInput.focus();
+      } else {
+        group._custom = false;
+        group.species = spSel.value;
+        // Re-render so gender/colour options refresh for the new species.
+        renderBeasts();
+      }
+      dirty = true; updateFooter();
+    });
+    if (custom) {
+      var customInput = document.createElement("input");
+      customInput.type = "text";
+      customInput.setAttribute("data-custom.species", "1");
+      customInput.setAttribute("list", "species-list");
+      customInput.placeholder = "Species id, e.g. NifflerOffspring";
+      customInput.value = group.species || "";
+      customInput.style.marginTop = "4px";
+      customInput.addEventListener("input", function () {
+        group.species = customInput.value; dirty = true; updateFooter();
+      });
+      spWrap.appendChild(customInput);
+    }
+    row.appendChild(spWrap);
+
+    row.appendChild(numField("Count", group.count, function (v) { group.count = v; }, 1, 64));
+
+    // Gender
+    var gWrap = document.createElement("div");
+    gWrap.className = "field";
+    gWrap.innerHTML = '<label>Gender</label><select>' + genderOptions.map(function (g) {
+      var label = g ? g : "any";
+      return '<option value="' + escapeAttr(g || "") + '"' + ((group.gender || "") === (g || "") ? " selected" : "") + '>' + escapeHtml(label) + '</option>';
+    }).join("") + '</select>';
+    var gSel = gWrap.querySelector("select");
+    gSel.addEventListener("change", function () { group.gender = gSel.value; dirty = true; updateFooter(); });
+    row.appendChild(gWrap);
+
+    // Colour
+    var cWrap = document.createElement("div");
+    cWrap.className = "field";
+    if (colorOptions.length) {
+      cWrap.innerHTML = '<label>Colour</label><select><option value="">any</option>' + colorOptions.map(function (c) {
+        return '<option value="' + escapeAttr(c) + '"' + ((group.color || "") === c ? " selected" : "") + '>' + escapeHtml(c) + '</option>';
+      }).join("") + '</select>';
+      var cSel = cWrap.querySelector("select");
+      cSel.addEventListener("change", function () { group.color = cSel.value; dirty = true; updateFooter(); });
+    } else {
+      cWrap.innerHTML = '<label>Colour</label><input type="text" list="color-list" value="' + escapeAttr(group.color || "") + '" placeholder="any" />';
+      var cIn = cWrap.querySelector("input");
+      cIn.addEventListener("input", function () { group.color = cIn.value; dirty = true; updateFooter(); });
+    }
+    row.appendChild(cWrap);
+
+    // Optional scale / yaw / name
+    row.appendChild(numField("Scale", group.scale, function (v) { group.scale = v; }, 0.05, 100, true));
+    row.appendChild(numField("Yaw", group.yaw, function (v) { group.yaw = v; }, -36000, 36000, true));
+
+    var nameField = document.createElement("div");
+    nameField.className = "field";
+    nameField.innerHTML = '<label>Name</label><input type="text" value="' + escapeAttr(group.name || "") + '" placeholder="optional" />';
+    var nameInput = nameField.querySelector("input");
+    nameInput.addEventListener("input", function () { group.name = nameInput.value; dirty = true; updateFooter(); });
+    row.appendChild(nameField);
+
+    // Capturable
+    var capWrap = document.createElement("div");
+    capWrap.className = "field";
+    capWrap.innerHTML = '<label>&nbsp;</label><label class="check"><input type="checkbox"' + (group.capturable ? " checked" : "") + ' /> Capturable</label>';
+    var capBox = capWrap.querySelector("input");
+    capBox.addEventListener("change", function () { group.capturable = capBox.checked; dirty = true; updateFooter(); });
+    row.appendChild(capWrap);
+
+    var rm = document.createElement("button");
+    rm.className = "rm";
+    rm.textContent = "Remove";
+    rm.addEventListener("click", function () {
+      draft.beasts.splice(index, 1);
+      if (!draft.beasts.length) draft.beasts.push(newBeast(""));
+      dirty = true; renderBeasts(); updateFooter();
+    });
+    row.appendChild(rm);
+
+    return row;
+  }
+
+  function numField(label, value, apply, min, max, optional) {
+    var wrap = document.createElement("div");
+    wrap.className = "field";
+    wrap.innerHTML = '<label>' + escapeHtml(label) + '</label><input type="number" step="any" value="' + (value === "" || value === undefined ? "" : num(value)) + '" placeholder="' + (optional ? "auto" : "") + '" />';
+    var input = wrap.querySelector("input");
+    input.addEventListener("input", function () {
+      apply(input.value === "" ? "" : Number(input.value));
+      dirty = true; updateFooter();
+    });
+    return wrap;
+  }
+
+  function field(label, control, extra) {
+    return '<div class="field' + (extra ? " " + extra : "") + '"><label>' + escapeHtml(label) + '</label>' + control + '</div>';
+  }
+
+  function updateFooter() {
+    var hasKey = draft && String(draft.key || "").trim() !== "";
+    var hasBeast = draft && draft.beasts.some(function (g) { return String(g.species || "").trim() !== ""; });
+    $("btn-save").disabled = !(hasKey && hasBeast);
+    $("btn-delete").disabled = !(draft && !isNew);
+  }
+
+  // ---- Actions -------------------------------------------------------------
+
+  function collect() {
+    var key = String(draft.key || "").trim().toLowerCase();
+    var beasts = draft.beasts
+      .filter(function (g) { return String(g.species || "").trim() !== ""; })
+      .map(function (g) {
+        var out = {
+          species: String(g.species).trim(),
+          count: clampInt(g.count, 1, 64, 1),
+          capturable: g.capturable !== false
+        };
+        if (g.gender) out.gender = String(g.gender);
+        if (g.color) out.color = String(g.color);
+        if (g.name) out.name = String(g.name);
+        if (g.scale !== "" && g.scale !== undefined) out.scale = Number(g.scale);
+        if (g.yaw !== "" && g.yaw !== undefined) out.yaw = Number(g.yaw);
+        return out;
+      });
+    return {
+      key: key,
+      enabled: !!draft.enabled,
+      position: {
+        x: Number(draft.position.x) || 0,
+        y: Number(draft.position.y) || 0,
+        z: Number(draft.position.z) || 0
+      },
+      radius: Number(draft.radius) || 3000,
+      virtualWorld: clampInt(draft.virtualWorld, 0, 100000, 0),
+      beasts: beasts
+    };
+  }
+
+  function save() {
+    if (!draft) return;
+    var lair = collect();
+    if (!lair.key) { bar("The lair needs a key.", "err"); return; }
+    if (!lair.beasts.length) { bar("Add at least one species before saving.", "err"); return; }
+    lastSavedKey = lair.key;
+    bar("Saving '" + lair.key + "'…");
+    send("save", { lair: lair });
+  }
+
+  function remove() {
+    if (!draft || isNew) return;
+    bar("Removed '" + draft.key + "'.");
+    send("delete", { key: draft.key });
+  }
+
+  function requestPosition() {
+    bar("Reading your position…");
+    send("position", {});
+  }
+
+  function reload() {
+    bar("Reloading from disk…");
+    send("reload", {});
+  }
+
+  // ---- Bridge --------------------------------------------------------------
+
+  window.addEventListener("hmp-beast-lairs:model", function (event) {
+    model = event.detail || model;
+    renderSpeciesDatalist();
+    renderBadges();
+
+    if (lastSavedKey) {
+      var target = lastSavedKey; lastSavedKey = null;
+      if (findByKey(target)) { selectLair(target); return; }
+    }
+    if (draft && !isNew && findByKey(draft.key)) {
+      if (!dirty) { selectLair(draft.key); return; }
+      renderList(); updateFooter(); return;
+    }
+    if (isNew && draft) { renderList(); renderForm(); updateFooter(); return; }
+    clearDraft();
+    bar("Loaded " + ((model && model.lairs && model.lairs.length) || 0) + " lair(s).");
+  });
+
+  window.addEventListener("hmp-beast-lairs:position", function (event) {
+    var value = event.detail || {};
+    if (!draft) { bar("Select or create a lair first.", "err"); return; }
+    if (!value.position) { bar("Could not read your position.", "err"); return; }
+    draft.position.x = value.position.x;
+    draft.position.y = value.position.y;
+    draft.position.z = value.position.z;
+    if (value.virtualWorld !== undefined && value.virtualWorld !== null) draft.virtualWorld = value.virtualWorld;
+    dirty = true;
+    renderForm();
+    updateFooter();
+    bar("Position set to " + Math.round(value.position.x) + ", " + Math.round(value.position.y) + ", " + Math.round(value.position.z) + " (world " + draft.virtualWorld + ").", "ok");
+  });
+
+  window.addEventListener("hmp-beast-lairs:notice", function (event) {
+    var value = event.detail || {};
+    bar(value.message || "Done.", "ok");
+    dirty = false;
+  });
+
+  window.addEventListener("hmp-beast-lairs:error", function (event) {
+    var value = event.detail || {};
+    bar(value.message || "Something went wrong.", "err");
+  });
+
+  // ---- Wire up chrome ------------------------------------------------------
+
+  function on(id, type, fn) {
+    var el = $(id);
+    if (el) el.addEventListener(type, fn);
+  }
+
+  on("filter", "input", function (e) { filterText = e.target.value; renderList(); });
+  on("btn-new", "click", function () {
+    draft = blankLair();
+    isNew = true; selectedKey = null; dirty = true;
+    renderList(); renderForm(); updateFooter();
+    var k = $("f-key"); if (k) k.focus();
+    bar("New lair — give it a key, adjust the position, pick a species, then Save.");
+  });
+  on("btn-save", "click", save);
+  on("btn-delete", "click", remove);
+  on("btn-reload", "click", reload);
+  on("btn-close", "click", function () { send("close", {}); });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { send("close", {}); }
+    else if (e.key === "s" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+  });
+
+  // ---- Window placement: centre on load, drag by the title bar -------------
+
+  var app = $("app");
+  var userMoved = false;
+
+  function centre() {
+    if (userMoved) return;
+    var rect = app.getBoundingClientRect();
+    app.style.left = Math.max(0, Math.round((window.innerWidth - rect.width) / 2)) + "px";
+    app.style.top = Math.max(0, Math.round((window.innerHeight - rect.height) / 2)) + "px";
+  }
+
+  (function enableDrag() {
+    var bar2 = $("titlebar");
+    var dragging = false, startX = 0, startY = 0, origL = 0, origT = 0;
+    bar2.addEventListener("pointerdown", function (e) {
+      if (e.target.closest("button")) return;   // let the buttons work
+      dragging = true;
+      userMoved = true;
+      startX = e.clientX; startY = e.clientY;
+      origL = app.offsetLeft; origT = app.offsetTop;
+      bar2.setPointerCapture(e.pointerId);
+    });
+    bar2.addEventListener("pointermove", function (e) {
+      if (!dragging) return;
+      var rect = app.getBoundingClientRect();
+      var nextL = origL + (e.clientX - startX);
+      var nextT = origT + (e.clientY - startY);
+      // Keep at least 60px of the panel on screen.
+      nextL = Math.min(window.innerWidth - 60, Math.max(60 - rect.width, nextL));
+      nextT = Math.min(window.innerHeight - 40, Math.max(0, nextT));
+      app.style.left = nextL + "px";
+      app.style.top = nextT + "px";
+    });
+    ["pointerup", "pointercancel"].forEach(function (type) {
+      bar2.addEventListener(type, function () { dragging = false; });
+    });
+  })();
+
+  window.addEventListener("resize", centre);
+
+  // ---- Offline preview (no game bridge) ------------------------------------
+
+  function escapeHtml(s) {
+    return String(s === undefined || s === null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function escapeAttr(s) { return escapeHtml(s).replace(/"/g, "&quot;"); }
+  function num(v) { return (v === undefined || v === null || v === "") ? 0 : v; }
+  function clampInt(v, min, max, fallback) {
+    var n = Math.round(Number(v));
+    if (!isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+  }
+
+  renderBadges();
+  centre();
+  send("ready");
+
+  if (typeof callEvent !== "function") {
+    // Preview in a plain browser: show a small sample so the layout is visible.
+    model = {
+      configSource: "data/hmp-beast-lairs.json",
+      hasBeastApi: true,
+      player: { position: { x: 367993, y: -454811, z: -81910 }, virtualWorld: 0 },
+      defaults: { radius: 3000 },
+      status: { state: "ready", lairs: 2, active: 0 },
+      catalog: [
+        { species: "Mooncalf", colors: ["Brown", "Grey"], genders: ["male", "female"] },
+        { species: "Niffler", colors: ["Black"], genders: ["male", "female"] },
+        { species: "Unicorn", colors: ["White", "Black"], genders: ["male", "female"] },
+        { species: "Hippogriff", colors: [], genders: ["male", "female"] }
+      ],
+      lairs: [
+        { key: "mooncalf-den", enabled: true, position: { x: 367993, y: -454811, z: -81910 }, radius: 2500, virtualWorld: 0,
+          beasts: [ { species: "Mooncalf", count: 4, capturable: true } ] },
+        { key: "niffler-burrow", enabled: false, position: { x: 300000, y: -400000, z: -80000 }, radius: 2000, virtualWorld: 0,
+          beasts: [ { species: "Niffler", count: 2, capturable: true, color: "Black" } ] },
+        { key: "graphorn-peak", enabled: true, position: { x: 410000, y: -520000, z: -70000 }, radius: 2500, virtualWorld: 0,
+          beasts: [ { species: "GraphornCalf", count: 1, capturable: true } ] }
+      ]
+    };
+    renderSpeciesDatalist();
+    renderBadges();
+    renderList();
+    bar("Preview mode — no game bridge detected.");
+  }
+})();
+</script>
+</body>
+</html>
