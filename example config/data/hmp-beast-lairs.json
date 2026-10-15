@@ -1,0 +1,17 @@
+{
+  "command": "beastlair",
+  "enableCommands": true,
+  "adminGroups": [
+    {
+      "key": "admin",
+      "minimumGrade": 1
+    }
+  ],
+  "enabled": true,
+  "tickIntervalMs": 2000,
+  "activateRadius": 12000,
+  "deactivateRadius": 18000,
+  "respawnDelayMs": 30000,
+  "maximumBeasts": 256,
+  "lairs": []
+}
