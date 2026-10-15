@@ -4,7 +4,6 @@
 
 https://docs.hogwarts-mp.com/guides/npcs-and-creatures/beasts-and-characters/
 
-This is separate from `hmp-npcs` and from the native `encounters` world policy. `hmp-npcs` only accepts enemy ids; `hmp-beast-lairs` spawns nurturable creatures such as `Mooncalf`, `Niffler`, `Hippogriff`, and their offspring.
 
 ## Configuration
 
