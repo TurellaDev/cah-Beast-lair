@@ -1,10 +1,9 @@
-# hmp-beast-lairs
+# cah-beast-lairs
 
-`hmp-beast-lairs` spawns configured wild beast populations when players approach a lair. It uses the server `Beast` API documented at:
+`cah-beast-lairs` spawns configured wild beast populations when players approach a lair. It uses the server `Beast` API documented at:
 
 https://docs.hogwarts-mp.com/guides/npcs-and-creatures/beasts-and-characters/
 
-This is separate from `hmp-npcs` and from the native `encounters` world policy. `hmp-npcs` only accepts enemy ids; `hmp-beast-lairs` spawns nurturable creatures such as `Mooncalf`, `Niffler`, `Hippogriff`, and their offspring.
 
 ## Configuration
 
